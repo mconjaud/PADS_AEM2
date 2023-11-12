@@ -1,0 +1,163 @@
+---
+title: "Atividade Prática 2"
+author: "Flavio Barbosa Shirahige"
+date: "2023-11-07"
+output: html_document
+---
+
+```{r warning=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readxl)
+library(stringi)
+library(factoextra)
+library(ggrepel)
+library(dplyr)
+```
+
+# Base de dados
+
+
+Os dados que serão utilizados nessa atividade são Secretaria de Segurança Pública de São Paulo e se referem à produtividade policial, registrados por mês ao longo de 2021 e detalhados para cada uma das regiões do estado de São Paulo.
+
+O primeiro passo é importar a base de dados e explorar a base importada:
+
+```{r}
+dados <- read_xlsx("produtividade_policial.xlsx")
+
+dados %>% 
+  sample_n(10)
+```
+Para facilitar a manipulação dos dados, serão removidos os caracteres especiais do nome das columas e deixá-los em letras minúsuculas:
+```{r}
+dados <- dados %>% 
+  rename_with(~ stri_trans_general(.x, "Latin-ASCII") %>% 
+                tolower())
+
+dados %>% 
+  sample_n(10)
+```
+
+## Tarefa 1
+Pergunta: "Para este exercício, manipule os dados para considerar apenas os dados totais de cada indicador para cada região. Forneça o código que deixa os dados no seguinte formato:"
+
+Assim, vamos manipular os dados para considerar apenas os dados totais de cada indicador para cada região:
+```{r}
+dados <- subset(dados, select = c(regiao, ocorrencia, total))
+```
+
+E colocar a tabela no formato em que a coluna de ocorrências se transforme em 1 coluna por indicador:
+```{r}
+dados <- dados %>% pivot_wider(names_from = ocorrencia,
+                               values_from = total)
+dados %>% 
+  sample_n(10)
+```
+
+
+## Tarefa 2
+
+Pergunta: "Realize o procedimento para obter as componentes principais deste conjunto de dados. Quantas componentes principais são necessárias para se explicar pelo menos 80% da variância dos dados?"
+
+O primeiro passo é obter as compomentes por meio da função prcomp e plotado o gráfico da variância dos dados explicada pelas componentes:
+```{r}
+set.seed(123)
+dados <- dados %>% 
+  column_to_rownames(var = "regiao")
+X <- scale(dados, center = TRUE, scale = TRUE)
+pca <- prcomp(X)
+pca$rotation <- -pca$rotation #contribuição de cada uma das preditoras para cada uma das componentes (invertendo o sinal)
+pca$x <- -pca$x #valores das componentes para cada observação/cidade (invertendo o sinal)
+Phi <- pca$rotation #contribuição de cada uma das preditoras para cada uma das componentes com sinal invertido
+dados_pca <- pca$x #valores das componentes para cada observação/cidade com sinal investido
+fviz_eig(pca, addlabels = TRUE)
+```
+
+E abaixo a soma acumulada do percentual explicado da variância dos dados:
+```{r}
+(cumsum(pca$sdev^2) / sum(pca$sdev^2))
+```
+
+Assim, com duas componentes principais podemos explicar mais de 80% da variância dos dados.
+
+## Tarefa 3
+
+Obtenha as contribuições das preditoras para a primeira componente principal. Qual nome você daria para esta componente?
+```{r}
+Phi[1:13,1:1]
+```
+
+
+## Tarefa 4
+
+Obtenha as contribuições das preditoras para a segunda componente principal. Qual nome você daria para esta componente?
+
+```{r}
+Phi[1:13,2:2]
+```
+
+
+## Tarefa 5
+
+Faça um gráfico de dispersão com as duas primeiras componentes principais. Com base nas respostas anteriores e neste gráfico, o que pode-se dizer sobre a Capital? E sobre a região de Ribeirão Preto? E Sorocaba?
+
+TROCAR O NOME DAS COLUNAS DOS INDICADORES PARA TORNA-LAS MAIS INTELIGIVEL NO GRAFICO?
+```{r}
+fviz_pca_biplot(pca, repel = TRUE, xlab = "PC1", ylab = "PC2")
+
+```
+
+
+## Tarefa 6 - Análise de Conglomerados
+
+### Tarefa 6.1
+Execute o método k-means para identificar o número ótimo de clusters entre as regiões analisadas;
+
+Gráfico do Método Silhouette
+```{r}
+fviz_nbclust(dados, kmeans, method = "silhouette")
+```
+
+Pelo método Silhouette, teremos 2 clusters.
+
+Gráfico do Método do Cotovelo (para os dados dos resultados do pca e iterando para até 10 clusters)
+```{r}
+set.seed(123)
+k <- 2:10
+tibble(k = k) %>% 
+  mutate(w = map_dbl(k, ~ kmeans(dados, centers = .x,
+                                 nstart = 10)$tot.withinss)) %>% 
+  ggplot(aes(k, w)) + 
+  geom_point() + 
+  scale_x_continuous(breaks = k) +
+  geom_line()
+```
+
+Pela análise acima, 6 clusters configura um ponto ótimo entre a minimização da distância intracluster e o número de clusters que permite a interpretabilidade (quanto menor o número de clusters, melhor)
+
+### Tarefa 6.2
+Visualize os grupos obtidos em um gráfico de dispersão (utilize o resultado do PCA para a construção dos gráficos)
+
+Inicialmente vamos converter a matriz dados_pca (que possui os valores das componentes para cada observação) em uma dataframe (tabela). Na sequência, vamos construir o gráfico de dispersão com as componentes PC1 e PC2.
+```{r}
+set.seed(123)
+dados_pca <- as.data.frame(dados_pca)
+(descricao <- dados_pca %>% 
+    mutate(cluster = factor(kmeans(dados_pca, centers = 4, nstart = 10)$cluster)))
+
+descricao %>% 
+  ggplot(aes(PC1, PC2, color = cluster)) + 
+  geom_point()+geom_text(aes(label = row.names(dados_pca)), vjust = -0.5)
+```
+
+### Tarefa 6.3
+Analise os resultados dos métodos de clusterização e interprete os grupos obtidos
+```{r}
+
+```
+
+### Tarefa 6.4
+Discuta as implicações práticas dos grupos identificados, considerando possíveis ações que a Secretaria de Segurança Pública de São Paulo pode realizar
+```{r}
+
+```
