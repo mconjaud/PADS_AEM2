@@ -82,28 +82,31 @@ Assim, com duas componentes principais podemos explicar mais de 80% da variânci
 
 ## Tarefa 3
 
-Obtenha as contribuições das preditoras para a primeira componente principal. Qual nome você daria para esta componente?
+Pergunta: "Obtenha as contribuições das preditoras para a primeira componente principal. Qual nome você daria para esta componente?"
 ```{r}
 Phi[1:13,1:1]
 ```
+Esta componente será nomeada como "Flagrante". 
 
 
 ## Tarefa 4
 
-Obtenha as contribuições das preditoras para a segunda componente principal. Qual nome você daria para esta componente?
+Pergunta: "Obtenha as contribuições das preditoras para a segunda componente principal. Qual nome você daria para esta componente?"
 
 ```{r}
 Phi[1:13,2:2]
 ```
-
+Esta componente será nomeada como "Baixo Risco de Morte do Policial", pois os crimes envolvidos nessa componente tem baixo risco de confronto.
 
 ## Tarefa 5
 
-Faça um gráfico de dispersão com as duas primeiras componentes principais. Com base nas respostas anteriores e neste gráfico, o que pode-se dizer sobre a Capital? E sobre a região de Ribeirão Preto? E Sorocaba?
+Pergunta: "Faça um gráfico de dispersão com as duas primeiras componentes principais. Com base nas respostas anteriores e neste gráfico, o que pode-se dizer sobre a Capital? E sobre a região de Ribeirão Preto? E Sorocaba?"
 
-TROCAR O NOME DAS COLUNAS DOS INDICADORES PARA TORNA-LAS MAIS INTELIGIVEL NO GRAFICO?
+RIbeirão Preto e Piraciba são cidades onde as ocorrências policiais têm um tendência de risco menor de morte do policial, enquanto as cidades da Grande São Paulo têm predominância de ocorrências policiais com Flagrante. No entanto, a Capital (sem as demais cidades da Grande São Paulo) possui baixa propensão de ocorrências com risco menor de morte do policial.
+
+
 ```{r}
-fviz_pca_biplot(pca, repel = TRUE, xlab = "PC1", ylab = "PC2")
+fviz_pca_biplot(pca, repel = TRUE, xlab = "PC1 - Flagrante", ylab = "PC2 - Baixo Risco de Morte do Policial")
 
 ```
 
@@ -111,16 +114,16 @@ fviz_pca_biplot(pca, repel = TRUE, xlab = "PC1", ylab = "PC2")
 ## Tarefa 6 - Análise de Conglomerados
 
 ### Tarefa 6.1
-Execute o método k-means para identificar o número ótimo de clusters entre as regiões analisadas;
+Pergunta: "Execute o método k-means para identificar o número ótimo de clusters entre as regiões analisada."
 
-Gráfico do Método Silhouette
+Inicialmente, faremos o gráfico do Método Silhouette:
 ```{r}
 fviz_nbclust(dados, kmeans, method = "silhouette")
 ```
 
-Pelo método Silhouette, teremos 2 clusters.
+Pelo método Silhouette, o número ótimo de clusters é 2.
 
-Gráfico do Método do Cotovelo (para os dados dos resultados do pca e iterando para até 10 clusters)
+Abaixo, vamos plotar o gráfico do Método do Cotovelo para verificar o número de cluster que minimiza a distância dos pontos dentro do cluster, iterando para até 10 clusters:
 ```{r}
 set.seed(123)
 k <- 2:10
@@ -133,31 +136,39 @@ tibble(k = k) %>%
   geom_line()
 ```
 
-Pela análise acima, 6 clusters configura um ponto ótimo entre a minimização da distância intracluster e o número de clusters que permite a interpretabilidade (quanto menor o número de clusters, melhor)
+Pela análise acima, 4 clusters configura um ponto ótimo entre a minimização da distância dentro do cluster e o número de clusters que permite a interpretabilidade (quanto menor o número de clusters, melhor).
 
 ### Tarefa 6.2
-Visualize os grupos obtidos em um gráfico de dispersão (utilize o resultado do PCA para a construção dos gráficos)
+Pergunta: "Visualize os grupos obtidos em um gráfico de dispersão (utilize o resultado do PCA para a construção dos gráficos)."
 
-Inicialmente vamos converter a matriz dados_pca (que possui os valores das componentes para cada observação) em uma dataframe (tabela). Na sequência, vamos construir o gráfico de dispersão com as componentes PC1 e PC2.
+Inicialmente vamos converter a matriz dados_pca (que possui os valores das componentes para cada observação) em uma dataframe (tabela). Na sequência, vamos construir o gráfico de dispersão com as componentes "PC1 - Alta Periculosidade" e "PC2 - Baixa Periculosidade".
 ```{r}
 set.seed(123)
 dados_pca <- as.data.frame(dados_pca)
 (descricao <- dados_pca %>% 
-    mutate(cluster = factor(kmeans(dados_pca, centers = 4, nstart = 10)$cluster)))
+    mutate(cluster = factor(kmeans(dados, centers = 4, nstart = 10)$cluster)))
 
 descricao %>% 
   ggplot(aes(PC1, PC2, color = cluster)) + 
-  geom_point()+geom_text(aes(label = row.names(dados_pca)), vjust = -0.5)
+  geom_point()+geom_text(aes(label = row.names(dados_pca)), vjust = -0.5) + 
+  labs(
+    x = "PC1 - Alta Periculosidade",
+    y = "PC2 - Baixa Periculosidade",
+    title = "Análise de Cluster da Produtividade Policial"
+  )
 ```
 
 ### Tarefa 6.3
-Analise os resultados dos métodos de clusterização e interprete os grupos obtidos
-```{r}
+Pergunta: "Analise os resultados dos métodos de clusterização e interprete os grupos obtidos"
 
-```
+Conforme o gráfico acima, foram definidos 4 clusters. Assim, temos: 
+
+- Cluster 1 - regiões com menor predominância nas duas componentes;
+- Cluster 2 - regiões com maior predominância de ocorrências de baixo risco de morte;
+- Cluster 3 - regiões comlto número de ocorrências de Flagrante, sem predominância de ocorrências de baixo risco de morte;
+- Cluster 4 - regiões com predominância de Flagrante, mas com risco de morte moderado.
+
 
 ### Tarefa 6.4
-Discuta as implicações práticas dos grupos identificados, considerando possíveis ações que a Secretaria de Segurança Pública de São Paulo pode realizar
-```{r}
-
-```
+Pergunta: "Discuta as implicações práticas dos grupos identificados, considerando possíveis ações que a Secretaria de Segurança Pública de São Paulo pode realizar"
+A Secretaria de Segurança Pública pode definir a distribuição de verbas e recursos com base na mitigição dos riscos relacionados às caracterísicas das ocorrências de cada cluster, conforme discutido no item anterior. Por exemplo, alocar para as regiões do cluster 3 um maior volume de recursos para compra de equipamentos de segurança por ter ocorrências de maior risco (flagrante).
