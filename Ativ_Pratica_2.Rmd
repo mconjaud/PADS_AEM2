@@ -1,0 +1,176 @@
+---
+title: "Atividade Prática 2"
+author: "Flavio Barbosa Shirahige"
+date: "2023-11-07"
+output: html_document
+---
+
+```{r warning=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readxl)
+library(stringi)
+library(factoextra)
+library(ggrepel)
+library(dplyr)
+
+```
+
+# Base de dados
+
+
+Os dados que serão utilizados nessa atividade são Secretaria de Segurança Pública de São Paulo e se referem à produtividade policial, registrados por mês ao longo de 2021 e detalhados para cada uma das regiões do estado de São Paulo.
+
+O primeiro passo é importar a base de dados e explorar a base importada:
+
+```{r}
+dados <- read_xlsx("produtividade_policial.xlsx")
+
+dados %>% 
+  sample_n(10)
+```
+Para facilitar a manipulação dos dados, serão removidos os caracteres especiais do nome das columas e deixá-los em letras minúsuculas:
+```{r}
+dados <- dados %>% 
+  rename_with(~ stri_trans_general(.x, "Latin-ASCII") %>% 
+                tolower())
+
+dados %>% 
+  sample_n(10)
+```
+
+## Tarefa 1
+Pergunta: "Para este exercício, manipule os dados para considerar apenas os dados totais de cada indicador para cada região. Forneça o código que deixa os dados no seguinte formato:"
+
+Assim, vamos manipular os dados para considerar apenas os dados totais de cada indicador para cada região:
+```{r}
+dados <- subset(dados, select = c(regiao, ocorrencia, total))
+```
+
+E colocar a tabela no formato em que a coluna de ocorrências se transforme em 1 coluna por indicador:
+```{r}
+dados <- dados %>% pivot_wider(names_from = ocorrencia,
+                               values_from = total)
+dados %>% 
+  sample_n(10)
+```
+
+
+## Tarefa 2
+
+Pergunta: "Realize o procedimento para obter as componentes principais deste conjunto de dados. Quantas componentes principais são necessárias para se explicar pelo menos 80% da variância dos dados?"
+
+O primeiro passo é obter as compomentes por meio da função prcomp e plotado o gráfico da variância dos dados explicada pelas componentes:
+```{r}
+set.seed(123)
+dados <- dados %>% 
+  column_to_rownames(var = "regiao")
+X <- scale(dados, center = TRUE, scale = TRUE)
+pca <- prcomp(X)
+pca$rotation <- -pca$rotation #contribuição de cada uma das preditoras para cada uma das componentes (invertendo o sinal)
+pca$x <- -pca$x #valores das componentes para cada observação/cidade (invertendo o sinal)
+Phi <- pca$rotation #contribuição de cada uma das preditoras para cada uma das componentes com sinal invertido
+dados_pca <- pca$x #valores das componentes para cada observação/cidade com sinal investido
+fviz_eig(pca, addlabels = TRUE)
+```
+
+E abaixo a soma acumulada do percentual explicado da variância dos dados:
+```{r}
+(cumsum(pca$sdev^2) / sum(pca$sdev^2))
+```
+
+Assim, com duas componentes principais podemos explicar mais de 80% da variância dos dados.
+
+## Tarefa 3
+
+Pergunta: "Obtenha as contribuições das preditoras para a primeira componente principal. Qual nome você daria para esta componente?"
+```{r}
+Phi[1:13,1:1]
+```
+Esta componente será nomeada como "Flagrante". 
+
+
+## Tarefa 4
+
+Pergunta: "Obtenha as contribuições das preditoras para a segunda componente principal. Qual nome você daria para esta componente?"
+
+```{r}
+Phi[1:13,2:2]
+```
+Esta componente será nomeada como "Baixo Risco de Morte do Policial", pois os crimes envolvidos nessa componente tem baixo risco de confronto.
+
+## Tarefa 5
+
+Pergunta: "Faça um gráfico de dispersão com as duas primeiras componentes principais. Com base nas respostas anteriores e neste gráfico, o que pode-se dizer sobre a Capital? E sobre a região de Ribeirão Preto? E Sorocaba?"
+
+RIbeirão Preto e Piraciba são cidades onde as ocorrências policiais têm um tendência de risco menor de morte do policial, enquanto as cidades da Grande São Paulo têm predominância de ocorrências policiais com Flagrante. No entanto, a Capital (sem as demais cidades da Grande São Paulo) possui baixa propensão de ocorrências com risco menor de morte do policial.
+
+
+```{r}
+fviz_pca_biplot(pca, repel = TRUE, xlab = "PC1 - Flagrante", ylab = "PC2 - Baixo Risco de Morte do Policial")
+
+```
+
+
+## Tarefa 6 - Análise de Conglomerados
+
+### Tarefa 6.1
+Pergunta: "Execute o método k-means para identificar o número ótimo de clusters entre as regiões analisada."
+
+Inicialmente, faremos o gráfico do Método Silhouette:
+```{r}
+fviz_nbclust(dados, kmeans, method = "silhouette")
+```
+
+Pelo método Silhouette, o número ótimo de clusters é 2.
+
+Abaixo, vamos plotar o gráfico do Método do Cotovelo para verificar o número de cluster que minimiza a distância dos pontos dentro do cluster, iterando para até 10 clusters:
+```{r}
+set.seed(123)
+k <- 2:10
+tibble(k = k) %>% 
+  mutate(w = map_dbl(k, ~ kmeans(dados, centers = .x,
+                                 nstart = 10)$tot.withinss)) %>% 
+  ggplot(aes(k, w)) + 
+  geom_point() + 
+  scale_x_continuous(breaks = k) +
+  geom_line()
+```
+
+Pela análise acima, 4 clusters configura um ponto ótimo entre a minimização da distância dentro do cluster e o número de clusters que permite a interpretabilidade (quanto menor o número de clusters, melhor).
+
+### Tarefa 6.2
+Pergunta: "Visualize os grupos obtidos em um gráfico de dispersão (utilize o resultado do PCA para a construção dos gráficos)."
+
+Inicialmente vamos converter a matriz dados_pca (que possui os valores das componentes para cada observação) em uma dataframe (tabela). Na sequência, vamos construir o gráfico de dispersão com as componentes "PC1 - Alta Periculosidade" e "PC2 - Baixa Periculosidade".
+```{r}
+set.seed(123)
+dados_pca <- as.data.frame(dados_pca)
+(descricao <- dados_pca %>% 
+    mutate(cluster = factor(kmeans(dados, centers = 4, nstart = 10)$cluster)))
+
+descricao %>% 
+  ggplot(aes(PC1, PC2, color = cluster)) + 
+  geom_point()+geom_text(aes(label = row.names(dados_pca)), vjust = -0.5) + 
+  labs(
+    x = "PC1 - Alta Periculosidade",
+    y = "PC2 - Baixa Periculosidade",
+    title = "Análise de Cluster da Produtividade Policial"
+  )
+```
+
+### Tarefa 6.3
+Pergunta: "Analise os resultados dos métodos de clusterização e interprete os grupos obtidos"
+
+Conforme o gráfico acima, foram definidos 4 clusters. Assim, temos: 
+
+- Cluster 1 - regiões com menor predominância nas duas componentes;
+- Cluster 2 - regiões com maior predominância de ocorrências de baixo risco de morte;
+- Cluster 3 - regiões comlto número de ocorrências de Flagrante, sem predominância de ocorrências de baixo risco de morte;
+- Cluster 4 - regiões com predominância de Flagrante, mas com risco de morte moderado.
+
+
+### Tarefa 6.4
+Pergunta: "Discuta as implicações práticas dos grupos identificados, considerando possíveis ações que a Secretaria de Segurança Pública de São Paulo pode realizar" 
+
+Resposta: A Secretaria de Segurança Pública pode definir a distribuição de verbas e recursos com base na mitigição dos riscos relacionados às caracterísicas das ocorrências de cada cluster, conforme discutido no item anterior. Por exemplo, alocar para as regiões do cluster 3 um maior volume de recursos para compra de equipamentos de segurança por ter ocorrências de maior risco (flagrante).
