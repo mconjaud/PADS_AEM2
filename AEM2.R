@@ -32,3 +32,6 @@ dados2 %>%
     values_from = total) # os valores das novas colunas sao os da coluna count
 
 view(dados2)
+
+
+HELIO MICHEL FLAVIO
